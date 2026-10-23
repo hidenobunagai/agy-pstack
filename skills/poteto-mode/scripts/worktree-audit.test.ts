@@ -160,6 +160,37 @@ describe("worktree-audit", () => {
     expect(row?.lastChat).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
+  it("agy transcript that mentions the workspace path counts", () => {
+    const wt = createWorkspace("wt-brain");
+    createWorkspace("wt-brain-r37");
+    // The chat started in the main repo, so its DB row points there.
+    initAgyDb([
+      {
+        conversationId: "conv-main",
+        lastModifiedTime: "2020-01-01 00:00:00+00:00",
+        workspaceUris: [`file://${repoDir}`],
+      },
+    ]);
+    const logs = path.join(
+      homeDir,
+      ".gemini/antigravity-cli/brain/conv-main/.system_generated/logs"
+    );
+    fs.mkdirSync(logs, { recursive: true });
+    // agy escapes the quotes around tool arguments: {"Path":"\"/abs/path\""}
+    fs.writeFileSync(
+      path.join(logs, "transcript.jsonl"),
+      JSON.stringify({ args: { Path: `"${wt}"` } }) + "\n"
+    );
+
+    const rows = runAudit();
+    expect(rows.find((r) => r.worktree.endsWith("/wt-brain"))?.bucket).toBe(
+      "verify-recent-chat"
+    );
+    expect(rows.find((r) => r.worktree.includes("wt-brain-r37"))?.bucket).toBe(
+      "safe"
+    );
+  });
+
   it("uncommitted changes mark workspace as hold-wip", () => {
     const wt = createWorkspace("wt-wip");
     fs.writeFileSync(path.join(wt, "draft.txt"), "work in progress");
@@ -171,7 +202,7 @@ describe("worktree-audit", () => {
     expect(row?.dirty).toMatch(/^wip:\d+/);
   });
 
-  it("fallback to claude directory when db is missing", () => {
+  it("claude chat started in the workspace counts", () => {
     const wt = createWorkspace("wt-claude");
     const slug = wt.replace(/[/.]/g, "-");
     const claudeDir = path.join(homeDir, ".claude", "projects", slug);
