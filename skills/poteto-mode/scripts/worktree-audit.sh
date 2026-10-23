@@ -77,65 +77,24 @@ has_agy_db=0
 if [ -f "$agy_db" ] && command -v python3 >/dev/null 2>&1; then
 	has_agy_db=1
 	python3 -c '
-import sqlite3, os, json, urllib.parse, datetime, sys
-
-db_path = sys.argv[1]
-
-def parse_ts(val):
-    if not val:
-        return 0
-    if isinstance(val, (int, float)):
-        return int(val)
-    if isinstance(val, str):
-        val = val.strip()
-        try:
-            return int(float(val))
-        except ValueError:
-            pass
-        try:
-            dt = datetime.datetime.fromisoformat(val)
-            ts = int(dt.timestamp())
-            return ts if ts > 0 else 0
-        except Exception:
-            return 0
-    return 0
-
+import json, os, sqlite3, sys, urllib.parse
+# agy stores "2026-10-23 19:23:20.461873344+00:00"; SQLite parses it on any
+# Python version, unlike datetime.fromisoformat before 3.11.
+conn = sqlite3.connect("file:" + os.path.abspath(sys.argv[1]) + "?mode=ro", uri=True)
 chats = {}
-try:
-    conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
-    c = conn.cursor()
-    c.execute("SELECT workspace_uris, last_modified_time FROM conversation_summaries WHERE workspace_uris IS NOT NULL AND workspace_uris != \"\"")
-    for raw_uris, raw_ts in c.fetchall():
-        ts = parse_ts(raw_ts)
-        if ts <= 0:
+for uris, ts in conn.execute("SELECT workspace_uris, CAST(strftime(\"%s\", last_modified_time) AS INTEGER) FROM conversation_summaries"):
+    try:
+        uris = json.loads(uris)
+    except ValueError:
+        continue
+    for uri in uris if isinstance(uris, list) else [uris]:
+        if not isinstance(uri, str) or not uri or not ts:
             continue
-        try:
-            uris = json.loads(raw_uris)
-            if isinstance(uris, str):
-                uris = [uris]
-            elif not isinstance(uris, list):
-                continue
-        except Exception:
-            continue
-        for uri in uris:
-            if not isinstance(uri, str) or not uri:
-                continue
-            if uri.startswith("file://"):
-                p = urllib.parse.unquote(urllib.parse.urlparse(uri).path)
-            else:
-                p = uri
-            norm = os.path.normpath(p)
-            chats[norm] = max(chats.get(norm, 0), ts)
-            try:
-                real = os.path.realpath(norm)
-                chats[real] = max(chats.get(real, 0), ts)
-            except Exception:
-                pass
-    conn.close()
-    for path, ts in chats.items():
-        print(f"{path}\t{ts}")
-except Exception:
-    pass
+        p = urllib.parse.unquote(urllib.parse.urlparse(uri).path) if uri.startswith("file://") else uri
+        for k in {os.path.normpath(p), os.path.realpath(p)}:
+            chats[k] = max(chats.get(k, 0), ts)
+for path, ts in chats.items():
+    print(f"{path}\t{ts}")
 ' "$agy_db" > "$agy_chats" 2>/dev/null
 fi
 

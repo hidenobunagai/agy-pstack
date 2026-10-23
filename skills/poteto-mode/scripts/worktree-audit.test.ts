@@ -113,10 +113,11 @@ describe("worktree-audit", () => {
 
   it("recent agy chat moves clean workspace to verify-recent-chat", () => {
     const wt = createWorkspace("wt-recent");
+    // Real agy rows carry nanoseconds: "2026-10-23 19:23:20.461873344+00:00".
     const nowIso = new Date()
       .toISOString()
       .replace("T", " ")
-      .replace("Z", "+00:00");
+      .replace("Z", "873344+00:00");
     initAgyDb([
       {
         conversationId: "conv-recent",
