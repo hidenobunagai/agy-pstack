@@ -95,7 +95,38 @@ for uris, ts in conn.execute("SELECT workspace_uris, CAST(strftime(\"%s\", last_
             chats[k] = max(chats.get(k, 0), ts)
 for path, ts in chats.items():
     print(f"{path}\t{ts}")
-' "$agy_db" > "$agy_chats" 2>/dev/null
+' "$agy_db" > "$agy_chats" || echo "warn: could not read $agy_db; agy chats started in a workspace are missed" >&2
+elif [ -f "$agy_db" ]; then
+	echo "warn: python3 not found; agy chats started in a workspace are missed" >&2
+fi
+
+# DSH keeps zstd-compressed transcripts under ~/.dsh/sessions/<slug>/<id>/
+# session.v4.jsonl.zstd. Each one names the folder it started in, so a path
+# match covers both cases. bun decompresses them in one pass (macOS has no zstd
+# CLI) and prints "<workspace>\t<mtime>" for every workspace a transcript names.
+dsh_sessions="${DSH_SESSIONS_DIR:-$HOME/.dsh/sessions}"
+dsh_chats=$(mktemp)
+if [ -d "$dsh_sessions" ] && command -v bun >/dev/null 2>&1; then
+	printf '%s\n' "$workspaces" | cut -f2 | grep . | bun -e '
+const fs = require("fs"), path = require("path");
+const wts = fs.readFileSync(0, "utf8").split("\n").filter(Boolean).map((w) => w.replace(/\/$/, ""));
+const files = fs.readdirSync(process.argv[1], { recursive: true })
+  .filter((f) => f.endsWith("session.v4.jsonl.zstd")).map((f) => path.join(process.argv[1], f));
+for (const f of files) {
+  let text;
+  try {
+    text = Bun.zstdDecompressSync(fs.readFileSync(f)).toString();
+  } catch (e) {
+    console.error(`warn: could not decompress ${f}: ${e.message}`);
+    continue;
+  }
+  const mtime = Math.floor(fs.statSync(f).mtimeMs / 1000);
+  for (const wt of wts)
+    if (["/", "\"", "\\", " "].some((t) => text.includes(wt + t))) console.log(`${wt}\t${mtime}`);
+}
+' "$dsh_sessions" > "$dsh_chats" || echo "warn: could not read DSH transcripts in $dsh_sessions" >&2
+elif [ -d "$dsh_sessions" ]; then
+	echo "warn: bun not found; DSH chats are missed" >&2
 fi
 
 echo "# base: $base"
@@ -143,16 +174,17 @@ EOF
 	[ -z "$pr" ] && pr="-"
 
 	# Most recent chat that operated in this workspace, from every source: a
-	# transcript that mentions the path, a Claude chat started in it, or an agy
-	# chat started in it. Match path followed by "/", a quote or the backslash of
-	# an escaped quote so glint-482 does not match glint-482-r37.
+	# Claude, agy or DSH transcript that mentions the path, a Claude chat started
+	# in it, or an agy chat started in it. Match path followed by "/", a quote,
+	# the backslash of an escaped quote or a space so glint-482 does not match
+	# glint-482-r37.
 	last="-"; last_ts=$( {
 		{ [ -d "$(slugdir "$main_wt")" ] && find "$(slugdir "$main_wt")" -maxdepth 1 -name '*.jsonl'
 		  [ -d "$agy_brain" ] && find "$agy_brain" -path '*/.system_generated/logs/transcript.jsonl'
-		} 2>/dev/null | xargs grep -lF -e "${wt}/" -e "${wt}\"" -e "${wt}\\" 2>/dev/null | mtimes
+		} 2>/dev/null | xargs grep -lF -e "${wt}/" -e "${wt}\"" -e "${wt}\\" -e "${wt} " 2>/dev/null | mtimes
 		[ -d "$(slugdir "$wt")" ] && find "$(slugdir "$wt")" -maxdepth 1 -name '*.jsonl' 2>/dev/null | mtimes
 		real_wt=$(cd "$wt" 2>/dev/null && pwd -P)
-		awk -F'\t' -v p="${wt%/}" -v r="$real_wt" '$1==p || $1==r {print $2}' "$agy_chats"
+		awk -F'\t' -v p="${wt%/}" -v r="$real_wt" '$1==p || $1==r {print $2}' "$agy_chats" "$dsh_chats"
 	} | awk '{print $1}' | sort -rn | head -1)
 	last_ts=${last_ts:-0}
 	[ "$last_ts" -gt 0 ] && last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null || date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null)
@@ -170,4 +202,4 @@ EOF
 		"$size" "$age" "$merged" "$dirty" "$remote" "$pr" "$last" "$bucket" "$name:$wt"
 done | sort -t$'\t' -k1,1 -rh
 
-rm -f "$prs" "$agy_chats"
+rm -f "$prs" "$agy_chats" "$dsh_chats"

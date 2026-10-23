@@ -191,6 +191,30 @@ describe("worktree-audit", () => {
     );
   });
 
+  it("DSH transcript that mentions the workspace path counts", () => {
+    const wt = createWorkspace("wt-dsh");
+    createWorkspace("wt-dsh-r37");
+    const session = path.join(
+      homeDir,
+      ".dsh/sessions/--home-pi--/session-1"
+    );
+    fs.mkdirSync(session, { recursive: true });
+    // DSH writes shell commands as "cd /abs/path && ...".
+    const line = JSON.stringify({ command: `cd ${wt} && jj st` }) + "\n";
+    fs.writeFileSync(
+      path.join(session, "session.v4.jsonl.zstd"),
+      Bun.zstdCompressSync(Buffer.from(line))
+    );
+
+    const rows = runAudit();
+    expect(rows.find((r) => r.worktree.endsWith("/wt-dsh"))?.bucket).toBe(
+      "verify-recent-chat"
+    );
+    expect(rows.find((r) => r.worktree.includes("wt-dsh-r37"))?.bucket).toBe(
+      "safe"
+    );
+  });
+
   it("uncommitted changes mark workspace as hold-wip", () => {
     const wt = createWorkspace("wt-wip");
     fs.writeFileSync(path.join(wt, "draft.txt"), "work in progress");
