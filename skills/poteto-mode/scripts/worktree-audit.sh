@@ -61,13 +61,83 @@ elif raw=$(cd "$main_wt" && gh pr list --author "@me" --state all --limit 1000 \
 fi
 [ -s "$prs" ] || echo "[]" > "$prs"
 
-# Transcripts: ~/.claude/projects/<slug>/*.jsonl, slug = path with "/" and "."
-# changed to "-". A chat started in the main repo mentions the workspace path;
-# a chat started in the workspace has its own folder.
+# Transcripts: ~/.gemini/antigravity-cli/conversation_summaries.db when present
+# (agy environment), extracted via python3 in one batch. Fallback to
+# ~/.claude/projects/<slug>/*.jsonl (Claude Code environment), slug = path with
+# "/" and "." changed to "-". A chat started in the main repo mentions the
+# workspace path; a chat started in the workspace has its own folder.
 slugdir() { printf '%s/.claude/projects/%s' "$HOME" "$(printf '%s' "$1" | tr '/.' '--')"; }
 if stat -c %Y / >/dev/null 2>&1; then mtimes() { xargs stat -c '%Y %n' 2>/dev/null; }
 else mtimes() { xargs stat -f '%m %N' 2>/dev/null; }; fi
 now=$(date +%s)
+
+agy_db="${AGY_CONVERSATION_DB:-$HOME/.gemini/antigravity-cli/conversation_summaries.db}"
+agy_chats=$(mktemp)
+has_agy_db=0
+if [ -f "$agy_db" ] && command -v python3 >/dev/null 2>&1; then
+	has_agy_db=1
+	python3 -c '
+import sqlite3, os, json, urllib.parse, datetime, sys
+
+db_path = sys.argv[1]
+
+def parse_ts(val):
+    if not val:
+        return 0
+    if isinstance(val, (int, float)):
+        return int(val)
+    if isinstance(val, str):
+        val = val.strip()
+        try:
+            return int(float(val))
+        except ValueError:
+            pass
+        try:
+            dt = datetime.datetime.fromisoformat(val)
+            ts = int(dt.timestamp())
+            return ts if ts > 0 else 0
+        except Exception:
+            return 0
+    return 0
+
+chats = {}
+try:
+    conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+    c = conn.cursor()
+    c.execute("SELECT workspace_uris, last_modified_time FROM conversation_summaries WHERE workspace_uris IS NOT NULL AND workspace_uris != \"\"")
+    for raw_uris, raw_ts in c.fetchall():
+        ts = parse_ts(raw_ts)
+        if ts <= 0:
+            continue
+        try:
+            uris = json.loads(raw_uris)
+            if isinstance(uris, str):
+                uris = [uris]
+            elif not isinstance(uris, list):
+                continue
+        except Exception:
+            continue
+        for uri in uris:
+            if not isinstance(uri, str) or not uri:
+                continue
+            if uri.startswith("file://"):
+                p = urllib.parse.unquote(urllib.parse.urlparse(uri).path)
+            else:
+                p = uri
+            norm = os.path.normpath(p)
+            chats[norm] = max(chats.get(norm, 0), ts)
+            try:
+                real = os.path.realpath(norm)
+                chats[real] = max(chats.get(real, 0), ts)
+            except Exception:
+                pass
+    conn.close()
+    for path, ts in chats.items():
+        print(f"{path}\t{ts}")
+except Exception:
+    pass
+' "$agy_db" > "$agy_chats" 2>/dev/null
+fi
 
 echo "# base: $base"
 printf "SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE\n"
@@ -116,13 +186,26 @@ EOF
 	# Most recent chat whose transcript operated in this workspace. Match path
 	# followed by "/" or a quote so glint-482 does not match glint-482-r37.
 	last="-"; last_ts=0
-	f=$( {
-		[ -d "$(slugdir "$main_wt")" ] && find "$(slugdir "$main_wt")" -maxdepth 1 -name '*.jsonl' \
-			-exec grep -lF -e "${wt}/" -e "${wt}\"" {} + 2>/dev/null
-		[ -d "$(slugdir "$wt")" ] && find "$(slugdir "$wt")" -maxdepth 1 -name '*.jsonl' 2>/dev/null
-	} | mtimes | sort -rn | head -1)
-	if [ -n "$f" ]; then last_ts=$(echo "$f" | awk '{print $1}')
-		last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null || date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null); fi
+	if [ "$has_agy_db" -eq 1 ]; then
+		wt_clean="${wt%/}"
+		last_ts=$(awk -F'\t' -v p="$wt_clean" '$1==p{print $2; exit}' "$agy_chats")
+		if [ -z "$last_ts" ] && [ -d "$wt_clean" ]; then
+			real_wt=$(cd "$wt_clean" 2>/dev/null && pwd -P)
+			[ -n "$real_wt" ] && last_ts=$(awk -F'\t' -v p="$real_wt" '$1==p{print $2; exit}' "$agy_chats")
+		fi
+		last_ts=${last_ts:-0}
+		if [ "$last_ts" -gt 0 ] 2>/dev/null; then
+			last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null || date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null)
+		fi
+	else
+		f=$( {
+			[ -d "$(slugdir "$main_wt")" ] && find "$(slugdir "$main_wt")" -maxdepth 1 -name '*.jsonl' \
+				-exec grep -lF -e "${wt}/" -e "${wt}\"" {} + 2>/dev/null
+			[ -d "$(slugdir "$wt")" ] && find "$(slugdir "$wt")" -maxdepth 1 -name '*.jsonl' 2>/dev/null
+		} | mtimes | sort -rn | head -1)
+		if [ -n "$f" ]; then last_ts=$(echo "$f" | awk '{print $1}')
+			last=$(date -d "@$last_ts" '+%Y-%m-%d' 2>/dev/null || date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null); fi
+	fi
 	recent=$([ "$last_ts" -gt 0 ] 2>/dev/null && [ $(( (now - last_ts) / 86400 )) -le 4 ] && echo yes || echo no)
 
 	case "$dirty" in wip:*|unknown) bucket=hold-wip ;; *)
@@ -137,4 +220,4 @@ EOF
 		"$size" "$age" "$merged" "$dirty" "$remote" "$pr" "$last" "$bucket" "$name:$wt"
 done | sort -t$'\t' -k1,1 -rh
 
-rm -f "$prs"
+rm -f "$prs" "$agy_chats"
