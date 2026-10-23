@@ -25,6 +25,8 @@ agy fixes a subagent's model in its agent definition, not per call, and reasonin
 | `pstack-judge` | pro | no | Judgment and prose: how explainer, why synthesizer, reflect judgment and synthesizer, the arena cross-judge, the first interrogate reviewer. |
 | `comment-sicko` | flash | comments only | The no-comments pass. |
 
+**Pro quota runs out often.** agy does not fall back on its own: a pro-tier subagent that hits a quota or capacity error stops with an error. When that happens, rerun the same brief once on the flash counterpart (`poteto-agent-pro` → `poteto-agent`, `pstack-judge` → `pstack-scout` with the judge's role written into the brief), and say in the reply which seats ran on flash. A panel whose pro seat fell back still runs, but say it lost its tier diversity. Never retry the pro seat in a loop, and never switch on paid credits.
+
 Map a skill's model roles and subagent fields with this table:
 
 | Cursor | agy |
