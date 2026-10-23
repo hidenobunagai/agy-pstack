@@ -1,0 +1,5 @@
+{
+  "poteto-always": {
+    "SessionStart": [{ "type": "command", "command": "sh hooks/poteto-always.sh", "timeout": 5 }]
+  }
+}
