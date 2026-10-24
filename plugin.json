@@ -1,7 +1,7 @@
 {
   "name": "pstack",
   "displayName": "pstack for agy",
-  "version": "0.15.30-agy.4",
+  "version": "0.15.30-agy.5",
   "description": "pstack adapted to the Antigravity CLI on this host: jj version control, flash and pro agent tiers, memmini for past decisions.",
   "author": { "name": "Lauren Tan (pstack), adapted by hidenobunagai" },
   "repository": "https://github.com/hidenobunagai/agy-pstack",
