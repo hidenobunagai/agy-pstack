@@ -20,12 +20,12 @@ agy fixes a subagent's model in its agent definition, not per call, and reasonin
 | Agent type | Model tier | Writes files | Use for |
 | --- | --- | --- | --- |
 | `poteto-agent` | flash (Gemini 3.8 Flash) | yes | Code delegates: feature, refactoring, bug-fix, perf-issue, hillclimb, swarm workers. |
-| `poteto-agent-pro` | pro (Gemini 4 Argon) | yes | The hardest changes, and the first seat of arena and architect runners. |
+| `poteto-agent-pro` | flash (Gemini 3.8 Flash) | yes | The hardest changes, and the first seat of arena and architect runners. Normally the pro tier (Gemini 4 Argon); mapped to flash while the Google AI Plus plan has no Argon access. |
 | `pstack-scout` | flash | no | Search: how explorers, why investigators, recall miners, the reflect tooling and divergent lenses, extra panel seats. |
-| `pstack-judge` | pro | no | Judgment and prose: how explainer, why synthesizer, reflect judgment and synthesizer, the arena cross-judge, the first interrogate reviewer. |
+| `pstack-judge` | flash | no | Judgment and prose: how explainer, why synthesizer, reflect judgment and synthesizer, the arena cross-judge, the first interrogate reviewer. Normally the pro tier; mapped to flash under the Plus plan, like `poteto-agent-pro`. |
 | `comment-sicko` | flash | comments only | The no-comments pass. |
 
-**Pro quota runs out often.** agy does not fall back on its own: a pro-tier subagent that hits a quota or capacity error stops with an error. When that happens, rerun the same brief once on the flash counterpart (`poteto-agent-pro` → `poteto-agent`, `pstack-judge` → `pstack-scout` with the judge's role written into the brief), and say in the reply which seats ran on flash. A panel whose pro seat fell back still runs, but say it lost its tier diversity. Never retry the pro seat in a loop, and never switch on paid credits.
+**Current plan configuration: every seat runs on flash.** The account is on Google AI Plus, which cannot use Gemini 4 Argon (paid Pro / Ultra only), so `poteto-agent-pro` and `pstack-judge` are defined with `model: flash`. Panels have no tier diversity in this configuration; do not report a pro/flash split. To restore the pro tier after returning to a paid Pro or Ultra plan, set `model: pro` again in those two agent definitions. On a pro-capable plan, note that pro quota runs out often and agy does not fall back on its own: a pro-tier subagent that hits a quota or capacity error stops with an error, so rerun the same brief once on the flash counterpart (`poteto-agent-pro` → `poteto-agent`, `pstack-judge` → `pstack-scout` with the judge's role written into the brief) and say in the reply which seats ran on flash. Never retry the pro seat in a loop, and never switch on paid credits.
 
 Map a skill's model roles and subagent fields with this table:
 
@@ -34,7 +34,7 @@ Map a skill's model roles and subagent fields with this table:
 | A `claude-*` slug, `judgment and prose`, or `hardest tasks` | `pstack-judge` for read-only work, `poteto-agent-pro` for work that edits files. |
 | A `grok-*`, `gpt-*`, `composer-*`, or other fast slug | `poteto-agent` for work that edits files, `pstack-scout` for read-only work. |
 | `auto` or `inherit-parent` | The same split by whether the work edits files. |
-| A panel of two or more seats | One pro seat and the rest flash, so the panel keeps two model tiers. |
+| A panel of two or more seats | One lead seat (`poteto-agent-pro` / `pstack-judge` by write access) and the rest flash. On a pro-capable plan the lead seat is the pro tier, so the panel keeps two model tiers; under the current Plus configuration every seat is the flash model. |
 | `subagent_type: generalPurpose` | `poteto-agent`, or `poteto-agent-pro` for the pro seat. |
 | `readonly: true` | `pstack-scout` or `pstack-judge`. Their tool lists cannot write files, and the brief still says "do not edit files". Check `jj st` afterward. |
 | `environment: "cloud"` | No cloud workers. Run `jj workspace add <path> -r <base>` yourself for each writing worker, put the path in the brief, and tell it to work only there and report with `jj diff`. |

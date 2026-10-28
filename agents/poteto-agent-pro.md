@@ -1,7 +1,7 @@
 ---
 name: poteto-agent-pro
-description: The same poteto-mode delegate on the pro tier. Use for the hardest changes and for the pro seat of arena and architect runners. Reads the poteto-mode skill in full before any work.
-model: pro
+description: The same poteto-mode delegate, mapped to the flash tier while the Google AI Plus plan has no Gemini 4 Argon access (normally the pro tier). Use for the hardest changes and for the lead seat of arena and architect runners. Reads the poteto-mode skill in full before any work.
+model: flash
 subagent: true
 mainAgent: false
 inheritMcp: true

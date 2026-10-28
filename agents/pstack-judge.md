@@ -1,7 +1,7 @@
 ---
 name: pstack-judge
-description: Read-only judgment subagent on the pro tier for pstack runs: explainers, synthesizers, the arena cross-judge, and the first interrogate reviewer. Cannot write files.
-model: pro
+description: Read-only judgment subagent, mapped to the flash tier while the Google AI Plus plan has no Gemini 4 Argon access (normally the pro tier), for pstack runs: explainers, synthesizers, the arena cross-judge, and the first interrogate reviewer. Cannot write files.
+model: flash
 subagent: true
 mainAgent: false
 inheritMcp: true
