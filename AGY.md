@@ -19,7 +19,7 @@
 - **Version control** maps git steps to jj. Parallel writers get `jj workspace add`.
 - **Always-on poteto-mode.** A SessionStart hook (`hooks/poteto-always.sh`) injects `skills/poteto-mode/SKILL.md` into every session, the way Cursor pins a custom mode. Say "poteto-mode off" to drop it for a session. It stays on in headless runs too, including the scheduled jobs. `PSTACK_POTETO=off` in the environment is kept as an escape hatch that skips it.
 - **Transcripts.** agy stores steps in a binary database, so `recall` and session pickup read `conversation_summaries.db` and `history.jsonl`, after searching memmini.
-- **Skills.** 49 of upstream's 57. Left out: `make-bot-ui`, `automate-me`, `setup-pstack`, `statechart`, the two formal verification skills, `typescript-best-practices`, and `bro`. Task skills are model-invocable; the 24 principle skills stay hidden.
+- **Skills.** 52 of upstream's 57. Left out: `make-bot-ui`, `automate-me`, `setup-pstack`, `typescript-best-practices`, and `bro`. `statechart` and the two formal verification skills were ported on 2026-10-30 from upstream v0.15.36; their first run installs Java and TLC via mise (or needs `TLA2TOOLS` and `JAVA` set). Task skills are model-invocable; the 24 principle skills stay hidden.
 
 ## Install
 
